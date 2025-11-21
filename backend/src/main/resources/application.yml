@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: job-autofill-backend
+
+server:
+  port: 8080
+
+# Ollama configuration
+ollama:
+  base-url: http://localhost:11434
+  model: phi3:mini
+  timeout: 30000  # 30 seconds timeout for Ollama calls
+
+# CORS configuration (allow Chrome extension to call our API)
+cors:
+  allowed-origins: "*"
+  allowed-methods: "GET,POST,PUT,DELETE,OPTIONS"
+  allowed-headers: "*"
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.jobautofill: DEBUG
