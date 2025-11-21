@@ -1,0 +1,27 @@
+#IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+#Java/Maven 
+target/
+*.jar
+*.class
+*.log
+
+#Node npm
+node_modules/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local
+*.pdf
+*.env
+
+# Ollama (if we cache locally)
+ollama_cache/
