@@ -1,6 +1,8 @@
 package com.jobautofill.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jobautofill.model.AutofillRequest;
+import com.jobautofill.model.AutofillResponse;
 import com.jobautofill.model.OllamaRequest;
 import com.jobautofill.model.OllamaResponse;
 import com.jobautofill.model.StructuredResume;
@@ -44,7 +46,7 @@ public class OllamaService {
         OllamaRequest request = new OllamaRequest();
         request.setModel(model);
         request.setStream(false);
-        request.setFormat("json");  // Force JSON output
+        request.setFormat("json");
         request.setMessages(List.of(
                 new OllamaRequest.Message("user", prompt)
         ));
@@ -65,11 +67,9 @@ public class OllamaService {
             String rawJsonContent = response.getMessage().getContent();
             log.debug("Raw Ollama response: {}", rawJsonContent);
 
-            // SANITIZE JSON to handle inconsistent data types
             String sanitizedJson = JsonSanitizer.sanitizeOllamaJson(rawJsonContent, objectMapper);
             log.debug("Sanitized JSON: {}", sanitizedJson);
 
-            // Parse JSON into StructuredResume
             StructuredResume structuredResume = objectMapper.readValue(sanitizedJson, StructuredResume.class);
             log.info("Successfully extracted structured resume");
 
@@ -82,9 +82,48 @@ public class OllamaService {
     }
 
     /**
-     * Builds the prompt for resume extraction.
-     * UPDATED: More explicit about data types.
+     * Maps a form field to a value from the structured resume.
      */
+    public AutofillResponse mapFieldToResumeValue(AutofillRequest fieldRequest, StructuredResume resume) {
+        log.info("Mapping field: {} (name: {})", fieldRequest.getFieldLabel(), fieldRequest.getFieldName());
+
+        String prompt = buildAutofillPrompt(fieldRequest, resume);
+
+        OllamaRequest request = new OllamaRequest();
+        request.setModel(model);
+        request.setStream(false);
+        request.setFormat("json");
+        request.setMessages(List.of(
+                new OllamaRequest.Message("user", prompt)
+        ));
+
+        try {
+            OllamaResponse response = webClient.post()
+                    .uri("/api/chat")
+                    .bodyValue(request)
+                    .retrieve()
+                    .bodyToMono(OllamaResponse.class)
+                    .timeout(Duration.ofMillis(timeout))
+                    .block();
+
+            if (response == null || response.getMessage() == null) {
+                throw new RuntimeException("Empty response from Ollama");
+            }
+
+            String jsonContent = response.getMessage().getContent();
+            log.debug("Autofill response: {}", jsonContent);
+
+            AutofillResponse autofillResponse = objectMapper.readValue(jsonContent, AutofillResponse.class);
+            log.info("Mapped field to value: {}", autofillResponse.getSuggestedValue());
+
+            return autofillResponse;
+
+        } catch (Exception e) {
+            log.error("Failed to map field to resume value", e);
+            return new AutofillResponse("", 0.0, "Failed to map field: " + e.getMessage(), null);
+        }
+    }
+
     private String buildExtractionPrompt(String resumeText) {
         return """
                 You are a resume parser. Extract the following information from the resume text and return ONLY valid JSON.
@@ -140,5 +179,60 @@ public class OllamaService {
                 
                 Return ONLY the JSON object following the exact structure above.
                 """;
+    }
+
+    private String buildAutofillPrompt(AutofillRequest fieldRequest, StructuredResume resume) {
+        String resumeJson;
+        try {
+            resumeJson = objectMapper.writeValueAsString(resume);
+        } catch (Exception e) {
+            resumeJson = "{}";
+        }
+
+        return String.format("""
+                You are an intelligent form autofill assistant. Your job is to map a form field to the most appropriate value from a candidate's resume.
+                
+                FORM FIELD INFORMATION:
+                - Label: %s
+                - Field name: %s
+                - Placeholder: %s
+                - Field type: %s
+                - Current value: %s
+                
+                CANDIDATE'S RESUME DATA (JSON):
+                %s
+                
+                INSTRUCTIONS:
+                1. Analyze the form field label, name, and placeholder to understand what information is being requested
+                2. Find the most relevant data from the resume JSON
+                3. Return ONLY a JSON object with this EXACT structure:
+                {
+                  "suggested_value": "the actual value to fill in the field",
+                  "confidence": 0.95,
+                  "reasoning": "brief explanation of why this value matches",
+                  "field_matched": "resume field name that was used"
+                }
+                
+                RULES:
+                - suggested_value must be a STRING (the actual text to fill)
+                - confidence must be a NUMBER between 0.0 and 1.0
+                - If no good match exists, return suggested_value as empty string "" with confidence 0.0
+                - For "Full Name" or "Name" fields, use personal_info.name
+                - For "Email" fields, use personal_info.email
+                - For "Phone" fields, use personal_info.phone
+                - For "Skills" or "Technical Skills" fields, join the skills array with commas
+                - For "Experience" or "Work Experience" fields, summarize the experience array
+                - For "Education" fields, use the most recent/relevant education entry
+                - Match field labels intelligently (e.g., "First Name" should extract first part of name)
+                
+                Return ONLY the JSON object, no other text.
+                """,
+                fieldRequest.getFieldLabel() != null ? fieldRequest.getFieldLabel() : "",
+                fieldRequest.getFieldName() != null ? fieldRequest.getFieldName() : "",
+                fieldRequest.getFieldPlaceholder() != null ? fieldRequest.getFieldPlaceholder() : "",
+                fieldRequest.getFieldType() != null ? fieldRequest.getFieldType() : "text",
+                fieldRequest.getFieldValueCurrent() != null ? fieldRequest.getFieldValueCurrent() : "",
+                resumeJson
+        );
     }
 }
