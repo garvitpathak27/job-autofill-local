@@ -5,6 +5,37 @@ console.log('Job Autofill content script loaded on:', window.location.href);
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('Message received in content script:', message);
 
+    if (message.action === 'detectFields') {
+        console.log('Detecting form fields...');
+        const fields = detectFormFields();
+
+        // Add data attributes to elements for easier identification
+        fields.forEach((field, index) => {
+            const fieldId = generateFieldId(field.element);
+            field.element.setAttribute('data-field-id', fieldId);
+            field.element.setAttribute('data-field-index', index);
+        });
+
+        console.log(`Found ${fields.length} fields:`, fields.map(f => ({
+            id: f.element.getAttribute('data-field-id'),
+            label: f.label,
+            name: f.name,
+            type: f.type
+        })));
+
+        sendResponse({
+            success: true,
+            fields: fields.map(field => ({
+                id: field.element.getAttribute('data-field-id'),
+                label: field.label,
+                name: field.name,
+                placeholder: field.placeholder,
+                type: field.type
+            }))
+        });
+        return false; // Synchronous response
+    }
+
     if (message.action === 'autofill') {
         handleAutofill(message.backendUrl)
             .then(result => {
@@ -16,6 +47,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse({ success: false, message: error.message });
             });
         return true; // Keep channel open for async response
+    }
+
+    if (message.action === 'fillFields') {
+        console.log('Filling fields:', message.fields);
+        let filledCount = 0;
+        message.fields.forEach(fieldData => {
+            const element = document.querySelector(`[data-field-id="${fieldData.id}"]`);
+            if (element) {
+                fillField(element, fieldData.value);
+                filledCount++;
+                console.log(`✓ Filled field ${fieldData.id} with: ${fieldData.value}`);
+            } else {
+                console.error(`Could not find element with data-field-id: ${fieldData.id}`);
+            }
+        });
+        sendResponse({ success: true, filledCount: filledCount });
+        return false;
     }
 });
 
@@ -194,24 +242,17 @@ async function getAutofillSuggestion(backendUrl, field) {
 }
 
 /**
- * Fill a form field with a value
+ * Generate unique ID for a field element
  */
-function fillField(element, value) {
-    // Set the value
-    element.value = value;
-    
-    // Visual feedback - green highlight
-    const originalBackground = element.style.backgroundColor;
-    element.style.backgroundColor = '#d1fae5';
-    element.style.transition = 'background-color 0.3s';
-    
-    // Trigger events to notify page of change
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-    element.dispatchEvent(new Event('blur', { bubbles: true }));
-    
-    // Remove highlight after 3 seconds
-    setTimeout(() => {
-        element.style.backgroundColor = originalBackground;
-    }, 3000);
+function generateFieldId(element) {
+    // Use existing id if available
+    if (element.id) return element.id;
+
+    // Generate unique id based on element properties
+    const type = element.tagName.toLowerCase();
+    const name = element.name || '';
+    const className = element.className || '';
+    const index = Array.from(document.querySelectorAll(`${type}[name="${name}"]`)).indexOf(element);
+
+    return `${type}_${name}_${className}_${index}`.replace(/\s+/g, '_').replace(/[^\w]/g, '_');
 }
