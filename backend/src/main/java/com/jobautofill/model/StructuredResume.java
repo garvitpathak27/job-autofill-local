@@ -64,16 +64,45 @@ public class StructuredResume {
         private String github;
 
         // Getters and Setters
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public String getEmail() { return email; }
-        public void setEmail(String email) { this.email = email; }
-        public String getPhone() { return phone; }
-        public void setPhone(String phone) { this.phone = phone; }
-        public String getLinkedin() { return linkedin; }
-        public void setLinkedin(String linkedin) { this.linkedin = linkedin; }
-        public String getGithub() { return github; }
-        public void setGithub(String github) { this.github = github; }
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getEmail() {
+            return email;
+        }
+
+        public void setEmail(String email) {
+            this.email = email;
+        }
+
+        public String getPhone() {
+            return phone;
+        }
+
+        public void setPhone(String phone) {
+            this.phone = phone;
+        }
+
+        public String getLinkedin() {
+            return linkedin;
+        }
+
+        public void setLinkedin(String linkedin) {
+            this.linkedin = linkedin;
+        }
+
+        public String getGithub() {
+            return github;
+        }
+
+        public void setGithub(String github) {
+            this.github = github;
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -81,20 +110,49 @@ public class StructuredResume {
         private String degree;
         private String institution;
         private String year;
-        private String score;      // NEW - handle CGPA/percentage
-        private String location;   // NEW - handle location
+        private String score; // NEW - handle CGPA/percentage
+        private String location; // NEW - handle location
 
         // Getters and Setters
-        public String getDegree() { return degree; }
-        public void setDegree(String degree) { this.degree = degree; }
-        public String getInstitution() { return institution; }
-        public void setInstitution(String institution) { this.institution = institution; }
-        public String getYear() { return year; }
-        public void setYear(String year) { this.year = year; }
-        public String getScore() { return score; }
-        public void setScore(String score) { this.score = score; }
-        public String getLocation() { return location; }
-        public void setLocation(String location) { this.location = location; }
+        public String getDegree() {
+            return degree;
+        }
+
+        public void setDegree(String degree) {
+            this.degree = degree;
+        }
+
+        public String getInstitution() {
+            return institution;
+        }
+
+        public void setInstitution(String institution) {
+            this.institution = institution;
+        }
+
+        public String getYear() {
+            return year;
+        }
+
+        public void setYear(String year) {
+            this.year = year;
+        }
+
+        public String getScore() {
+            return score;
+        }
+
+        public void setScore(String score) {
+            this.score = score;
+        }
+
+        public String getLocation() {
+            return location;
+        }
+
+        public void setLocation(String location) {
+            this.location = location;
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -103,18 +161,47 @@ public class StructuredResume {
         private String company;
         private String duration;
         private String description;
-        private String location;   // NEW - handle location
+        private String location; // NEW - handle location
 
         // Getters and Setters
-        public String getTitle() { return title; }
-        public void setTitle(String title) { this.title = title; }
-        public String getCompany() { return company; }
-        public void setCompany(String company) { this.company = company; }
-        public String getDuration() { return duration; }
-        public void setDuration(String duration) { this.duration = duration; }
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-        public String getLocation() { return location; }
-        public void setLocation(String location) { this.location = location; }
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
+        }
+
+        public String getCompany() {
+            return company;
+        }
+
+        public void setCompany(String company) {
+            this.company = company;
+        }
+
+        public String getDuration() {
+            return duration;
+        }
+
+        public void setDuration(String duration) {
+            this.duration = duration;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public void setDescription(String description) {
+            this.description = description;
+        }
+
+        public String getLocation() {
+            return location;
+        }
+
+        public void setLocation(String location) {
+            this.location = location;
+        }
     }
 }

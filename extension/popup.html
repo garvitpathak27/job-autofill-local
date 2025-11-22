@@ -13,6 +13,21 @@
             <p class="tagline">AI-powered form filler (100% local)</p>
         </header>
 
+        <!-- Model Selection Section -->
+        <div id="model-section" class="section">
+            <h2>Ollama Model</h2>
+            <p class="instructions">Pick from the models available in your local Ollama install.</p>
+            <select id="ollama-model-select" class="select-field">
+                <option>Loading models...</option>
+            </select>
+            <div class="model-meta">
+                <span class="model-active-label">Active:</span>
+                <span id="ollama-model-active">-</span>
+                <button id="refresh-models" class="link-button" type="button">Refresh</button>
+            </div>
+            <div id="model-status" class="status-message"></div>
+        </div>
+
         <!-- Status Section -->
         <div id="status-section" class="section">
             <div id="status-indicator" class="status-box">

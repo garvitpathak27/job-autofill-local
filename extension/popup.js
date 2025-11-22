@@ -5,12 +5,14 @@ const BACKEND_URL = 'http://localhost:8080';
 let selectedFile = null;
 let detectedFields = [];
 let fieldSuggestions = {};
+let currentModelName = null;
 
 // DOM Elements
 let dropZone, fileInfo, fileName, resumeUploadInput, uploadBtn, uploadStatus;
 let statusIndicator, statusText, resumeInfoSection;
 let scanBtn, autofillStatus;
 let previewModal, fieldsPreview, applyBtn, cancelBtn, closeModal;
+let modelSelect, modelStatus, refreshModelsBtn, modelActiveLabel;
 
 // Initialize popup
 document.addEventListener('DOMContentLoaded', () => {
@@ -28,6 +30,10 @@ document.addEventListener('DOMContentLoaded', () => {
     resumeInfoSection = document.getElementById('resume-info-section');
     scanBtn = document.getElementById('scan-btn');
     autofillStatus = document.getElementById('autofill-status');
+    modelSelect = document.getElementById('ollama-model-select');
+    modelStatus = document.getElementById('model-status');
+    refreshModelsBtn = document.getElementById('refresh-models');
+    modelActiveLabel = document.getElementById('ollama-model-active');
     
     // Modal elements
     previewModal = document.getElementById('preview-modal');
@@ -50,10 +56,201 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelBtn.addEventListener('click', closePreviewModal);
     closeModal.addEventListener('click', closePreviewModal);
 
+    // Model selectors
+    if (modelSelect) {
+        initModelSelection();
+    }
+
     // Check backend health and resume status
     checkBackendHealth();
     checkResumeStatus();
 });
+
+function initModelSelection() {
+    if (refreshModelsBtn) {
+        refreshModelsBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            loadOllamaModels({ silent: false });
+        });
+    }
+
+    modelSelect.addEventListener('change', async (event) => {
+        const newModel = event.target.value;
+        const previousModel = currentModelName;
+
+        try {
+            await setBackendModel(newModel, { persist: true, silent: false });
+            currentModelName = newModel;
+        } catch (error) {
+            console.error('Failed to switch Ollama model', error);
+            if (previousModel) {
+                modelSelect.value = previousModel;
+            }
+        }
+    });
+
+    loadOllamaModels({ silent: true });
+}
+
+async function loadOllamaModels({ silent = false } = {}) {
+    if (!modelSelect) return;
+
+    modelSelect.disabled = true;
+    if (!silent) {
+        showMessage(modelStatus, 'Loading Ollama models...', 'info');
+    }
+
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/ollama/models`, {
+            signal: AbortSignal.timeout(5000)
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}));
+            throw new Error(errorBody.error || `Failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        const models = Array.isArray(data.models) ? data.models : [];
+        const activeModel = data.activeModel || null;
+
+        modelSelect.innerHTML = '';
+
+        if (models.length === 0) {
+            const option = document.createElement('option');
+            option.disabled = true;
+            option.textContent = 'No Ollama models found';
+            modelSelect.appendChild(option);
+            showMessage(modelStatus, 'No local Ollama models detected. Run `ollama pull <model>` first.', 'error');
+            return;
+        }
+
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.name;
+
+            const labelSegments = [model.name];
+            if (model.family) {
+                labelSegments.push(`• ${model.family}`);
+            }
+            if (model.sizeBytes && model.sizeBytes > 0) {
+                labelSegments.push(`(${formatBytes(model.sizeBytes)})`);
+            }
+
+            option.textContent = labelSegments.join(' ');
+            modelSelect.appendChild(option);
+        });
+
+        const savedModel = await getPersistedModel();
+        let initialModel = null;
+
+        if (savedModel && models.some(model => model.name === savedModel)) {
+            initialModel = savedModel;
+        } else if (activeModel && models.some(model => model.name === activeModel)) {
+            initialModel = activeModel;
+        } else {
+            initialModel = models[0].name;
+        }
+
+        modelSelect.value = initialModel;
+        currentModelName = initialModel;
+
+        if (!activeModel || activeModel !== initialModel) {
+            try {
+                await setBackendModel(initialModel, { persist: false, silent: true });
+            } catch (error) {
+                console.error('Failed to set initial Ollama model', error);
+                showMessage(modelStatus, `Failed to set model: ${error.message}`, 'error');
+                return;
+            }
+        } else if (modelActiveLabel) {
+            modelActiveLabel.textContent = activeModel;
+        }
+
+        if (silent) {
+            showMessage(modelStatus, `Active model: ${initialModel}`, 'info');
+        } else {
+            showMessage(modelStatus, `Models refreshed. Active: ${initialModel}`, 'success');
+        }
+
+    } catch (error) {
+        console.error('loadOllamaModels error', error);
+        showMessage(modelStatus, `Failed to load Ollama models: ${error.message}`, 'error');
+    } finally {
+        modelSelect.disabled = false;
+    }
+}
+
+async function setBackendModel(modelName, { persist = true, silent = false } = {}) {
+    if (!modelName) {
+        return;
+    }
+
+    if (!silent) {
+        showMessage(modelStatus, `Switching to ${modelName}...`, 'info');
+    }
+
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/ollama/model`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: modelName })
+        });
+
+        const body = await response.json().catch(() => ({}));
+
+        if (!response.ok || body.success === false) {
+            throw new Error(body.error || `Failed with status ${response.status}`);
+        }
+
+        const active = body.model || modelName;
+        currentModelName = active;
+
+        if (modelActiveLabel) {
+            modelActiveLabel.textContent = active;
+        }
+
+        if (persist) {
+            await persistModelSelection(active);
+        }
+
+        if (!silent) {
+            showMessage(modelStatus, `✓ Using ${active}`, 'success');
+        }
+    } catch (error) {
+        if (!silent) {
+            showMessage(modelStatus, `Failed to switch model: ${error.message}`, 'error');
+        }
+        throw error;
+    }
+}
+
+function getPersistedModel() {
+    return new Promise(resolve => {
+        chrome.storage.local.get(['ollamaSelectedModel'], result => {
+            resolve(result.ollamaSelectedModel || null);
+        });
+    });
+}
+
+function persistModelSelection(modelName) {
+    return new Promise(resolve => {
+        chrome.storage.local.set({ ollamaSelectedModel: modelName }, resolve);
+    });
+}
+
+function formatBytes(bytes) {
+    if (!bytes || bytes <= 0) {
+        return '';
+    }
+
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const value = bytes / Math.pow(1024, exponent);
+    const formatted = value >= 10 || exponent === 0 ? value.toFixed(0) : value.toFixed(1);
+
+    return `${formatted} ${units[exponent]}`;
+}
 
 function handleDragOver(e) {
     e.preventDefault();

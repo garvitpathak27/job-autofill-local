@@ -27,15 +27,15 @@ public class ResumeParserService {
 
         // Load PDF document from MultipartFile bytes
         try (PDDocument document = Loader.loadPDF(file.getBytes())) {
-            
+
             // Create PDFTextStripper to extract text
             PDFTextStripper stripper = new PDFTextStripper();
-            
+
             // Extract text from all pages
             String text = stripper.getText(document);
-            
+
             log.info("Successfully extracted {} characters from PDF", text.length());
-            
+
             return text.trim();
         } catch (IOException e) {
             log.error("Failed to parse PDF: {}", e.getMessage());
@@ -52,8 +52,8 @@ public class ResumeParserService {
     public boolean isPdf(MultipartFile file) {
         String contentType = file.getContentType();
         String fileName = file.getOriginalFilename();
-        
+
         return (contentType != null && contentType.equals("application/pdf")) ||
-               (fileName != null && fileName.toLowerCase().endsWith(".pdf"));
+                (fileName != null && fileName.toLowerCase().endsWith(".pdf"));
     }
 }

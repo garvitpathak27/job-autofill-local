@@ -1,217 +1,245 @@
-// Content script - injected into all pages
+// Content script with Workday-safe field detection
 console.log('Job Autofill content script loaded on:', window.location.href);
 
-// Listen for messages from popup
+let fieldCounter = 0;
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('Message received in content script:', message);
 
-    if (message.action === 'autofill') {
-        handleAutofill(message.backendUrl)
-            .then(result => {
-                console.log('Autofill result:', result);
-                sendResponse(result);
-            })
-            .catch(error => {
-                console.error('Autofill error:', error);
-                sendResponse({ success: false, message: error.message });
-            });
-        return true; // Keep channel open for async response
+    if (message.action === 'detectFields') {
+        console.log('Detecting form fields...');
+        const fields = detectFormFields();
+        console.log('Found', fields.length, 'safe fields');
+        sendResponse({ success: true, fields: fields });
+        return true;
+    }
+
+    if (message.action === 'fillFields') {
+        console.log('Filling fields:', message.fields.length, 'fields');
+        fillSelectedFields(message.fields)
+            .then(result => sendResponse(result))
+            .catch(error => sendResponse({ success: false, error: error.message }));
+        return true;
     }
 });
 
 /**
- * Main autofill logic - detects and fills form fields
+ * CRITICAL: Determine if element is safe to autofill
  */
-async function handleAutofill(backendUrl) {
-    console.log('Starting autofill process...');
-
-    // Find all form inputs on the page
-    const fields = detectFormFields();
+function isSafeToAutofill(element) {
+    const tagName = element.tagName.toLowerCase();
+    const type = element.type ? element.type.toLowerCase() : '';
     
-    if (fields.length === 0) {
-        console.log('No form fields detected');
-        return { 
-            success: false, 
-            message: 'No fillable form fields found on this page',
-            fieldsCount: 0,
-            totalFields: 0
-        };
+    // Rule 1: Only fill safe element types
+    const safeTextInputs = ['text', 'email', 'tel', 'url'];
+    const isSafeInput = tagName === 'input' && safeTextInputs.includes(type);
+    const isSafeTextarea = tagName === 'textarea';
+    
+    if (!isSafeInput && !isSafeTextarea) {
+        return false;
     }
-
-    console.log(`Found ${fields.length} form fields:`, fields.map(f => ({
-        label: f.label,
-        name: f.name,
-        type: f.type
-    })));
-
-    let filledCount = 0;
-    const errors = [];
-
-    // Process each field
-    for (const field of fields) {
-        try {
-            console.log(`Processing field: ${field.label || field.name}`);
-            
-            const suggestion = await getAutofillSuggestion(backendUrl, field);
-            console.log('Suggestion:', suggestion);
-            
-            if (suggestion.suggested_value && suggestion.confidence > 0.5) {
-                fillField(field.element, suggestion.suggested_value);
-                filledCount++;
-                console.log(`✓ Filled: ${field.label || field.name} = ${suggestion.suggested_value}`);
-            } else {
-                console.log(`✗ Skipped (low confidence): ${field.label || field.name}`);
-            }
-        } catch (error) {
-            console.error(`Failed to autofill field ${field.label}:`, error);
-            errors.push(`${field.label}: ${error.message}`);
-        }
+    
+    // Rule 2: Avoid Workday's controlled dropdowns/comboboxes
+    if (element.closest('[role="combobox"]')) {
+        return false;
     }
-
-    return {
-        success: true,
-        fieldsCount: filledCount,
-        totalFields: fields.length,
-        errors: errors.length > 0 ? errors : undefined
-    };
+    
+    // Rule 3: Avoid autocomplete fields
+    const ariaAutocomplete = element.getAttribute('aria-autocomplete');
+    if (ariaAutocomplete === 'list' || ariaAutocomplete === 'both') {
+        return false;
+    }
+    
+    // Rule 4: Avoid country/state fields
+    const automationId = element.getAttribute('data-automation-id') || '';
+    if (automationId.includes('country') || automationId.includes('state')) {
+        return false;
+    }
+    
+    // Rule 5: Avoid hidden or disabled fields
+    if (element.disabled || element.readOnly) {
+        return false;
+    }
+    
+    // Rule 6: Avoid Workday selector patterns
+    const workdaySelectors = ['select', 'dropdown', 'picker', 'lookup'];
+    const elementClasses = element.className || '';
+    const hasWorkdaySelector = workdaySelectors.some(pattern => 
+        elementClasses.includes(pattern) || automationId.includes(pattern)
+    );
+    
+    if (hasWorkdaySelector) {
+        return false;
+    }
+    
+    return true;
 }
 
-/**
- * Detect form fields on the page
- */
 function detectFormFields() {
     const fields = [];
-    const inputs = document.querySelectorAll('input, textarea, select');
+    const inputs = document.querySelectorAll('input, textarea');
+    fieldCounter = 0;
+
+    console.log('Total elements found:', inputs.length);
 
     inputs.forEach(element => {
-        // Skip hidden fields, passwords, submit buttons, checkboxes, radio
-        if (element.type === 'hidden' || 
-            element.type === 'password' || 
-            element.type === 'submit' || 
-            element.type === 'button' ||
-            element.type === 'checkbox' ||
-            element.type === 'radio' ||
-            element.type === 'file') {
+        // Skip unwanted types
+        const skipTypes = ['hidden', 'password', 'submit', 'button', 'file', 'image', 'reset', 'checkbox', 'radio'];
+        if (skipTypes.includes(element.type)) {
             return;
         }
 
-        // Skip if already filled (optional - remove if you want to overwrite)
-        // if (element.value && element.value.trim() !== '') {
-        //     return;
-        // }
+        // Only detect safe fields
+        if (!isSafeToAutofill(element)) {
+            return;
+        }
 
-        // Get field metadata
         const fieldData = {
-            element: element,
+            id: `field_${fieldCounter++}`,
             label: getFieldLabel(element),
             name: element.name || element.id || '',
             placeholder: element.placeholder || '',
-            type: element.type || 'text',
-            currentValue: element.value || ''
+            type: element.type || element.tagName.toLowerCase(),
+            currentValue: element.value || '',
+            tagName: element.tagName.toLowerCase()
         };
 
-        // Only add if we have some identifying information
+        // Store reference
+        element.dataset.autofillId = fieldData.id;
+
         if (fieldData.label || fieldData.name || fieldData.placeholder) {
             fields.push(fieldData);
+            console.log('✓ Added safe field:', fieldData.label || fieldData.name);
         }
     });
 
+    console.log('Final safe field count:', fields.length);
     return fields;
 }
 
-/**
- * Get label for a form field
- */
 function getFieldLabel(element) {
-    // Check for <label> element by 'for' attribute
+    // Check for <label> by 'for' attribute
     if (element.id) {
         const label = document.querySelector(`label[for="${element.id}"]`);
-        if (label) return label.textContent.trim();
+        if (label) return cleanLabel(label.textContent);
     }
 
-    // Check for parent label
+    // Check parent label
     const parentLabel = element.closest('label');
     if (parentLabel) {
-        // Get text content but exclude the input itself
-        let text = parentLabel.textContent.trim();
-        return text;
-    }
-
-    // Check for nearby text (previous sibling)
-    let prevSibling = element.previousElementSibling;
-    if (prevSibling) {
-        if (prevSibling.textContent && prevSibling.textContent.trim()) {
-            return prevSibling.textContent.trim();
-        }
+        return cleanLabel(parentLabel.textContent);
     }
 
     // Check aria-label
     const ariaLabel = element.getAttribute('aria-label');
-    if (ariaLabel) return ariaLabel.trim();
+    if (ariaLabel) return cleanLabel(ariaLabel);
 
-    // Check for nearby span/div with text
-    const parent = element.parentElement;
-    if (parent) {
-        const spans = parent.querySelectorAll('span, div');
-        for (const span of spans) {
-            if (span.textContent && span.textContent.trim() && !span.contains(element)) {
-                return span.textContent.trim();
+    // Check data-automation-label (Workday specific)
+    const automationLabel = element.getAttribute('data-automation-label');
+    if (automationLabel) return cleanLabel(automationLabel);
+
+    // Check placeholder
+    if (element.placeholder) return cleanLabel(element.placeholder);
+
+    // Check previous sibling
+    const prevSibling = element.previousElementSibling;
+    if (prevSibling && prevSibling.textContent) {
+        return cleanLabel(prevSibling.textContent);
+    }
+
+    return element.name || element.id || 'Unknown field';
+}
+
+function cleanLabel(text) {
+    if (!text) return '';
+    return text.trim()
+        .replace(/\s+/g, ' ')
+        .replace(/\*$/, '')
+        .replace(/\(optional\)/i, '')
+        .trim();
+}
+
+async function fillSelectedFields(fields) {
+    let filledCount = 0;
+    let skippedCount = 0;
+
+    for (const fieldData of fields) {
+        try {
+            const element = document.querySelector(`[data-autofill-id="${fieldData.id}"]`);
+            
+            if (!element) {
+                console.warn('Element not found for:', fieldData.id);
+                skippedCount++;
+                continue;
             }
+
+            // Double-check safety
+            if (!isSafeToAutofill(element)) {
+                console.warn('Skipping unsafe element:', fieldData.id);
+                skippedCount++;
+                continue;
+            }
+
+            if (fieldData.value && fieldData.value.trim() !== '') {
+                await fillField(element, fieldData.value);
+                filledCount++;
+                console.log('✓ Filled:', fieldData.label || fieldData.name);
+            } else {
+                skippedCount++;
+            }
+        } catch (error) {
+            console.error('Error filling field:', fieldData.id, error);
+            skippedCount++;
         }
     }
 
-    // Fallback to name or placeholder
-    return element.name || element.placeholder || 'Unknown field';
+    console.log(`Fill complete: ${filledCount} filled, ${skippedCount} skipped`);
+    
+    return { 
+        success: true, 
+        filledCount: filledCount,
+        skippedCount: skippedCount
+    };
 }
 
-/**
- * Get autofill suggestion from backend
- */
-async function getAutofillSuggestion(backendUrl, field) {
-    const requestBody = {
-        field_label: field.label,
-        field_name: field.name,
-        field_placeholder: field.placeholder,
-        field_type: field.type,
-        field_value_current: field.currentValue
-    };
-
-    console.log('Requesting autofill for:', requestBody);
-
-    const response = await fetch(`${backendUrl}/api/autofill`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-        throw new Error(`Autofill API returned ${response.status}`);
+async function fillField(element, value) {
+    const tagName = element.tagName.toLowerCase();
+    
+    // Set value using native setters (React compatibility)
+    if (tagName === 'input') {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        if (descriptor && descriptor.set) {
+            descriptor.set.call(element, value);
+        } else {
+            element.value = value;
+        }
+    } else if (tagName === 'textarea') {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+        if (descriptor && descriptor.set) {
+            descriptor.set.call(element, value);
+        } else {
+            element.value = value;
+        }
     }
 
-    return await response.json();
-}
-
-/**
- * Fill a form field with a value
- */
-function fillField(element, value) {
-    // Set the value
-    element.value = value;
+    // Trigger events with delays for React
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise(resolve => setTimeout(resolve, 100));
     
-    // Visual feedback - green highlight
-    const originalBackground = element.style.backgroundColor;
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    element.dispatchEvent(new Event('blur', { bubbles: true }));
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // Visual feedback
+    const originalBg = element.style.backgroundColor;
     element.style.backgroundColor = '#d1fae5';
     element.style.transition = 'background-color 0.3s';
     
-    // Trigger events to notify page of change
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-    element.dispatchEvent(new Event('blur', { bubbles: true }));
-    
-    // Remove highlight after 3 seconds
     setTimeout(() => {
-        element.style.backgroundColor = originalBackground;
-    }, 3000);
+        element.style.backgroundColor = originalBg;
+    }, 2000);
 }
+
+console.log('Content script ready and listening');
