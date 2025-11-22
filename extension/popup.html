@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Autofill Assistant</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 Job Autofill</h1>
+            <p class="tagline">AI-powered form filler (100% local)</p>
+        </header>
+
+        <!-- Status Section -->
+        <div id="status-section" class="section">
+            <div id="status-indicator" class="status-box">
+                <span class="status-icon">⚠️</span>
+                <span id="status-text">No resume uploaded</span>
+            </div>
+        </div>
+
+        <!-- Upload Section with Drag & Drop -->
+        <div id="upload-section" class="section">
+            <h2>1. Upload Resume</h2>
+            
+            <!-- Drag & Drop Zone -->
+            <div id="drop-zone" class="drop-zone">
+                <div class="drop-zone-content">
+                    <span class="drop-icon">📄</span>
+                    <p class="drop-text">Drag & drop your resume PDF here</p>
+                    <p class="drop-or">or</p>
+                    <label for="resume-upload" class="file-label">
+                        Click to browse files
+                    </label>
+                    <input type="file" id="resume-upload" accept=".pdf" style="display: none;" />
+                </div>
+                <div id="file-info" class="file-info hidden">
+                    <span class="file-icon">✓</span>
+                    <span id="file-name">No file selected</span>
+                </div>
+            </div>
+            
+            <button id="upload-btn" class="btn btn-primary" disabled>Upload & Extract</button>
+            <div id="upload-status" class="status-message"></div>
+        </div>
+
+        <!-- Resume Info Section (hidden initially) -->
+        <div id="resume-info-section" class="section hidden">
+            <h2>2. Resume Loaded</h2>
+            <div id="resume-details" class="info-box">
+                <p><strong>Name:</strong> <span id="resume-name">-</span></p>
+                <p><strong>Email:</strong> <span id="resume-email">-</span></p>
+                <p><strong>Phone:</strong> <span id="resume-phone">-</span></p>
+                <p><strong>Skills:</strong> <span id="resume-skills">-</span></p>
+            </div>
+        </div>
+
+        <!-- Autofill Section -->
+        <div id="autofill-section" class="section">
+            <h2>3. Autofill Forms</h2>
+            <p class="instructions">
+                Navigate to a job application page, then click the button below to detect and autofill form fields.
+            </p>
+            <button id="autofill-btn" class="btn btn-success" disabled>
+                🚀 Autofill Current Page
+            </button>
+            <div id="autofill-status" class="status-message"></div>
+        </div>
+
+        <!-- Footer -->
+        <footer>
+            <p class="footer-text">
+                <span class="badge">Local LLM</span>
+                <span class="badge">Privacy-First</span>
+                <span class="badge">No Cloud</span>
+            </p>
+        </footer>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

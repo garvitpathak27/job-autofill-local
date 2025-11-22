@@ -1,0 +1,2 @@
+curl -X POST http://localhost:8080/api/resume/upload \
+  -F "file=@/home/garvitpathak27/Downloads/resume.pdf"

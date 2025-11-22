@@ -8,8 +8,8 @@ server:
 # Ollama configuration
 ollama:
   base-url: http://localhost:11434
-  model: phi3:mini
-  timeout: 30000  # 30 seconds timeout for Ollama calls
+  model: gemma3:4b-it-qat
+  timeout: 60000  # 60 seconds timeout for Ollama calls
 
 # CORS configuration (allow Chrome extension to call our API)
 cors:
