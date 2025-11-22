@@ -21,11 +21,10 @@
             </div>
         </div>
 
-        <!-- Upload Section with Drag & Drop -->
+        <!-- Upload Section -->
         <div id="upload-section" class="section">
             <h2>1. Upload Resume</h2>
             
-            <!-- Drag & Drop Zone -->
             <div id="drop-zone" class="drop-zone">
                 <div class="drop-zone-content">
                     <span class="drop-icon">📄</span>
@@ -46,7 +45,7 @@
             <div id="upload-status" class="status-message"></div>
         </div>
 
-        <!-- Resume Info Section (hidden initially) -->
+        <!-- Resume Info Section -->
         <div id="resume-info-section" class="section hidden">
             <h2>2. Resume Loaded</h2>
             <div id="resume-details" class="info-box">
@@ -59,12 +58,12 @@
 
         <!-- Autofill Section -->
         <div id="autofill-section" class="section">
-            <h2>3. Autofill Forms</h2>
+            <h2>3. Smart Autofill</h2>
             <p class="instructions">
-                Navigate to a job application page, then click the button below to detect and autofill form fields.
+                Navigate to a job application page, then click below to scan fields and preview autofill.
             </p>
-            <button id="autofill-btn" class="btn btn-success" disabled>
-                🚀 Autofill Current Page
+            <button id="scan-btn" class="btn btn-success" disabled>
+                🔍 Scan & Preview Fields
             </button>
             <div id="autofill-status" class="status-message"></div>
         </div>
@@ -77,6 +76,29 @@
                 <span class="badge">No Cloud</span>
             </p>
         </footer>
+    </div>
+
+    <!-- Preview Modal -->
+    <div id="preview-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📋 Preview Autofill</h2>
+                <button id="close-modal" class="close-btn">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+                <p class="modal-subtitle">Review and edit suggestions before applying</p>
+                
+                <div id="fields-preview" class="fields-list">
+                    <!-- Fields will be dynamically added here -->
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button id="cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button id="apply-btn" class="btn btn-primary">✓ Apply All Fields</button>
+            </div>
+        </div>
     </div>
 
     <script src="popup.js"></script>
